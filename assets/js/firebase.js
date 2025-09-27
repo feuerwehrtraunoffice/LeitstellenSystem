@@ -25,8 +25,21 @@
     e.preventDefault();
     const email = document.getElementById("email").value;
     const password = document.getElementById("password").value;
+
     auth.signInWithEmailAndPassword(email, password)
-      .then(() => window.location.href = "index.html")
+      .then((userCredential) => {
+        const uid = userCredential.user.uid;
+        return db.collection("users").doc(uid).get();
+      })
+      .then((doc) => {
+        if (doc.exists) {
+          const role = doc.data().role;
+          localStorage.setItem("userRole", role);
+          window.location.href = "index.html";
+        } else {
+          alert("Keine Rolle zugewiesen. Bitte Admin kontaktieren.");
+        }
+      })
       .catch(err => alert("Fehler beim Login: " + err.message));
   });
 
@@ -35,6 +48,14 @@
     const email = prompt("E-Mail:");
     const password = prompt("Passwort:");
     auth.createUserWithEmailAndPassword(email, password)
+      .then((userCredential) => {
+        const uid = userCredential.user.uid;
+        // Standardrolle setzen (z. B. "mitglied")
+        return db.collection("users").doc(uid).set({
+          email: email,
+          role: "mitglied"
+        });
+      })
       .then(() => alert("Registrierung erfolgreich!"))
       .catch(err => alert("Fehler bei Registrierung: " + err.message));
   }
@@ -42,11 +63,29 @@
   // Einsatzdaten anzeigen (einsatz.html)
   const einsatzListe = document.getElementById("einsatzListe");
   if (einsatzListe) {
-    db.collection("einsaetze").onSnapshot(snapshot => {
+    db.collection("einsaetze").orderBy("zeit", "desc").onSnapshot(snapshot => {
       einsatzListe.innerHTML = "";
       snapshot.forEach(doc => {
         const data = doc.data();
         einsatzListe.innerHTML += `<li><strong>${data.titel}</strong> – ${data.status}</li>`;
+      });
+    });
+  }
+
+  // Admin-Funktion: Einsatz hinzufügen (optional)
+  const role = localStorage.getItem("userRole");
+  if ((role === "admin" || role === "superuser") && document.getElementById("einsatzForm")) {
+    document.getElementById("einsatzForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const titel = document.getElementById("einsatzTitel").value;
+      const status = document.getElementById("einsatzStatus").value;
+      db.collection("einsaetze").add({
+        titel: titel,
+        status: status,
+        zeit: new Date().toISOString()
+      }).then(() => {
+        alert("Einsatz hinzugefügt!");
+        document.getElementById("einsatzForm").reset();
       });
     });
   }
